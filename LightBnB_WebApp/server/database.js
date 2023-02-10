@@ -182,22 +182,29 @@ exports.getAllProperties = getAllProperties;
 const addProperty = function(property) {
 
   let queryParams = [];
-  let queryString = `INSERT INTO properties (
-    title, description, owner_id, cover_photo_url, thumbnail_photo_url, cost_per_night, parking_spaces, number_of_bathrooms, number_of_bedrooms, active, province, city, country, street, post_code) 
-    VALUES ( `;
+  // let queryString = `INSERT INTO properties (
+  //   title, description, owner_id, cover_photo_url, thumbnail_photo_url, cost_per_night, parking_spaces, number_of_bathrooms, number_of_bedrooms, active, province, city, country, street, post_code) 
+  //   VALUES ( `;
+  let queryString = `INSERT INTO properties (`;
+  
+  for (let val of Object.keys(property)){
+    queryString += `${val}, `;
+  }
+  queryString = queryString.slice(0,-2);
+  queryString += ") ";
+  queryString += `VALUES (`;
     
     for (let val of Object.values(property)){
       queryParams.push(val);
       queryString += `$${queryParams.length}, `;
     }
-    queryString = queryString.slice(0,-2);
-    queryString += ")";
+  queryString = queryString.slice(0,-2);
+  queryString += ")";
 
   queryString += " RETURNING *;";
-  console.log(queryString,queryParams);
 
   return pool
-  .query(queryString,property).then((result) => {
+  .query(queryString,queryParams).then((result) => {
     console.log(result.rows);
     return result.rows;
   }).catch((err)=> {
