@@ -90,10 +90,10 @@ exports.addUser = addUser;
 const getAllReservations = function(guest_id, limit = 10) {
 
   const queryString = `SELECT properties.id, properties.title, properties.cost_per_night, reservations.start_date, AVG(property_reviews.rating) 
-  FROM reservations
-  JOIN properties
+  FROM properties
+  LEFT JOIN reservations
   ON properties.id = reservations.property_id
-  JOIN property_reviews
+  LEFT JOIN property_reviews
   ON properties.id = property_reviews.property_id
   JOIN users
   ON users.id = reservations.guest_id
@@ -103,7 +103,7 @@ const getAllReservations = function(guest_id, limit = 10) {
   LIMIT $2;`;
 
   return pool.query(queryString,[guest_id,limit]).then((result) => {
-    //console.log(result.rows);
+    console.log(result.rows);
     return result.rows;
   }).catch((err)=> {
     console.log(err)
@@ -122,9 +122,55 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
+  
+  const queryParams = [];
+  
+  let qString = `SELECT properties.*, AVG(property_reviews.rating) as average_rating FROM properties JOIN property_reviews ON properties.id = property_id `;
+
+  //console.log("Insider query there is",qString, typeof qString);
+
+  if (options.owner_id) {
+    qString += `JOIN users ON users.id = properties.owner_id `;
+  }
+
+  if (options.owner_id) {    
+    queryParams.push(options.owner_id)
+    qString += (qString.includes("WHERE")) ? 'AND': 'WHERE';
+    qString += ` users.id = $${queryParams.length}`;
+  }
+  
+  if (options.city) {
+    
+    queryParams.push(`%${options.city}%`);
+    qString += (qString.includes('WHERE')) ? 'AND': 'WHERE';
+    qString += ` city LIKE $${queryParams.length} `;
+  }
+
+  if (options.minimum_price_per_night && options.maximum_price_per_night) {
+    queryParams.push(options.minimum_price_per_night, options.maximum_price_per_night);
+    qString += (qString.includes('WHERE')) ? 'AND': 'WHERE';
+    qString += ` price_per_night BETWEEN ${queryParams.length-1} AND ${queryParams.length} `;
+  }
+
+  if (options.minimum_rating) {
+    queryParams.push(options.minimum_rating)
+    qString += (qString.includes('WHERE')) ? 'AND': 'WHERE';
+    qString += ` user.id = $${queryParams.length} `;
+  }
+  
+  // 4
+  queryParams.push(limit);
+  qString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  
+  console.log("final q string is /n",qString,typeof qString);
+
   return pool
-    .query(`SELECT * FROM properties
-    LIMIT $1`,[limit]).then((result) => {
+    .query(qString,queryParams).then((result) => {
       //console.log(result.rows);
       return result.rows;
     }).catch((err)=> {
@@ -145,9 +191,23 @@ const addProperty = function(property) {
   // property.id = propertyId;
   // properties[propertyId] = property;
   // return Promise.resolve(property);
+  let queryParams = [];
+  let queryString = `INSERT INTO properties (
+    title, description, owner_id, cover_photo_url, thumbnail_photo_url, cost_per_night, parking_spaces, number_of_bathrooms, number_of_bedrooms, active, province, city, country, street, post_code) 
+    VALUES ( `;
+    
+    for (let val of Object.values(property)){
+      queryParams.push(val);
+      queryString += `$${queryParams.length}, `;
+    }
+    queryString = queryString.slice(0,-2);
+    queryString += ")";
+
+  queryString += " RETURNING *;";
+  console.log(queryString,queryParams);
+
   return pool
-  .query(`INSERT INTO properties(name,email,password)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,[property]).then((result) => {
+  .query(queryString,property).then((result) => {
     console.log(result.rows);
     return result.rows;
   }).catch((err)=> {
